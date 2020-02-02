@@ -1,0 +1,395 @@
+---
+title: "Internet User Analysis Project"
+output: html_document
+---
+## R Markdown
+```{r}
+library(tidyverse)
+library(maps)
+library(stringr)
+```
+
+Team:
+Cole Hanniwell, 180302780
+Einstein Oyewole, 180517070
+Louise Peralta, 
+
+Introduction: The internet is the most significant and commonly used technology today. With continuous improvements and innovation in devices/hardware and wireless technologies, global access is increasingly available and affordable regardless of geography. Every day more and more people on the planet can get some access to the internet to see and share information. However, there is still a digital divide around the world with internet usage. There are huge disparities among regions of the world and there is still a segment of people who do not have any access to the internet.
+
+Questions: Define how you will measure internet use in a country. Note that I expect that each group may have a different definition of "internet use". The analysis should follow how you choose to define internet use in a country.
+
+Do different regions of the world have different internet usage?
+
+According to your definition of internet use what is the impact of democracy, education, economy, and health on internet use? Your group will need to define democracy, education, economy, and health.
+
+Do the number of telephone lines within a country have any affect on the internet use within that country?
+
+The Data:
+```{r}
+
+democracyindex <- read_csv("democracyindex2017.csv")
+democracyindex <- democracyindex %>%
+  filter(Rank != "Rank") 
+democracyindex$Rank <- str_replace_all(democracyindex$Rank, "=", "")
+democracyindex <- type_convert(democracyindex)
+sapply(democracyindex, class)
+```
+The Democracy Index data set has 167 observations and 9 variables: Rank (numeric), Country (character), Score (numeric), Electoral process and pluralism (numeric), Functioning of Government (numeric), Political Participation (numeric), Political Culture (numeric), Civil Liberties (numeric), Category (character).
+
+```{r}
+education <- read_csv("education_cia2017.csv")
+sapply(education, class)
+```
+The Education data set has 173 observations and 4 variables: Rank (numeric), Country (character), (% OF GDP) (numeric), Date of Information (numeric).
+  
+```{r}
+GDP <- read_csv("gdpppp_cia2017.csv")
+GDP$`Date of Information` <- GDP$`Date of Information` %>%
+  str_remove_all(" est.") %>%
+  parse_number()
+GDP$`GDP - PER CAPITA (PPP)` <- GDP$`GDP - PER CAPITA (PPP)` %>%
+  str_remove_all("$")%>%
+  parse_number
+sapply(GDP, class)
+```
+The GDP data set has 229 observations and 4 variables: Rank (numeric), Country (character), GDP - PER CPITA (PPP) (numeric), Date of Information (numeric).
+
+```{r}
+
+healthexpend <- read_csv("healthexpend_cia2017.csv")
+sapply(healthexpend, class)
+```
+The Health expend data set has 192 observations and 4 variables: Rank (numeric), Country (character), (% OF GDP) (numeric), Date of Information (numeric).
+  
+```{r}
+
+internetusers <- read_csv("internetusers_cia2017.csv")
+internetusers$`Date of Information` <- internetusers$`Date of Information` %>%
+  str_remove_all(" est.") %>%
+  parse_number()
+sapply(internetusers, class)
+```
+The Internet Users data set has 228 observations and 4 variables: Rank (numeric), Country (character), INTERNET USERS (numeric), Date of Information (numeric).
+  
+```{r}
+
+population <- read_csv("population_cia2017.csv")
+population$`Date of Information` <- population$`Date of Information` %>%
+  str_remove_all(" est.")%>%
+  parse_number()
+sapply(population, class)
+```
+The Population data set has 238 observations and 4 variables: Rank (numeric), Country (character), POPULATION (numeric), Date of Information (numeric).
+
+```{r}
+
+phonelines <- read_csv("telephonelines_cia2017.csv")
+phonelines$`Date of Information` <- phonelines$`Date of Information` %>%
+  str_remove_all(" est.") %>%
+  parse_number()
+sapply(phonelines, class)
+```
+The Phonelines data set has 221 observations and 4 variables: Rank (numeric), Country (character), Country TELEPHONES - MAIN LINES IN USE (numeric), Date of Information (numeric).
+  
+```{r}
+
+regions <- read_csv("world_regions.csv")
+regions$Region <- parse_factor(regions$Region)
+regions$`Global South` <- parse_factor(regions$`Global South`)
+colnames(regions)[colnames(regions)=="Global South"] <- "Global_South_North"
+sapply(regions, class)
+```
+The Regions data set has 258 observations and 3 variables: Country (character), Region (factor), Global_South_North (factor).
+
+To answer Question 1 we used the definition from the CIA website as we believe that it is a good description of an Internet user.
+
+Internet User: Internet users compares the number of users within a country that access the Internet. Statistics vary from country to country and may include users who access the Internet at least several times a week to those who access it only once within a period of several months. Definition From:
+https://www.cia.gov/library/publications/resources/the-world-factbook/rankorder/2153rank.html
+
+Creating a data set to analyze percentage of internet users per country and region to begin answering question 2:
+```{r}
+#Internet Users and Population
+colnames(internetusers)[colnames(internetusers)== "INTERNET USERS"] = "Internet_Users"
+colnames(population)[colnames(population)== "POPULATION"] = "Population"
+
+internetusers$Country[internetusers$Country == "Swaziland"] <- "Eswatini"
+
+intpop <- inner_join(internetusers, population, by = "Country") %>%
+  select(Country, Internet_Users, Population) %>%
+  mutate(Percentage = Internet_Users/Population*100) %>%
+  filter(Percentage <= 100)
+
+Palestine <- filter(internetusers, Internet_Users == 2673000)
+Palestine <- inner_join(Palestine, population, by = "Country")
+PalestinePop = sum(Palestine$Population)
+
+intpop$Country[100] <- "Palestine"
+intpop$Population[100] <- PalestinePop
+intpop$Percentage[100] <- intpop$Internet_Users[100]/intpop$Population[100]*100
+intpop
+```
+The table above shows each country with the number of internet users within the country, the population of the country and the Percentage of internet users within the country (Internet Users/Population). We decided to perform the rest of our analysis using the percentage of internet users rather than the physical number of users within a given country. This allows to have more accurate analysis later when performing analysis on higher developed countries with lower populations (Ex. Belgium, Switzerland). We feel this is more accurate than analyzing the higher internet user countries with more internet users and a higher population with a low percentage of users (Ex. India, Indonesia).
+
+To show the internet difference we created a map of the world showing the different internet use percentage of each country to show that very few countries have the same percentage of internet users.
+```{r}
+#Changing Intpop regions to match with world regions
+world <- map_data("world")
+intpop2 <- intpop %>% rename(region = Country)
+intpop2$region[3] <- "USA"
+intpop2$region[16] <- "South Korea"
+intpop2$region[10] <- "UK"
+intpop2$region[66] <- "Ivory Coast"
+intpop2$region[intpop2$region == "Czechia"] <- "Czech Republic"
+intpop2$region[intpop2$region == "Congo, Democratic Republic of the"] <-  "Democratic Republic of the Congo"
+intpop2$region[intpop2$region == "Congo, Republic of the"] <-  "Republic of Congo"
+intpop2$region[intpop2$region == "Burma"] <-  "Myanmar"
+intpop2$region[intpop2$region == "Gambia, The"] <-  "Gambia"
+intpop2$region[intpop2$region == "Cabo Verde"] <-  "Cape Verde"
+intpop2$region[intpop2$region == "Bahamas, The"] <-  "Bahamas"
+intpop2$region[intpop2$region == "Micronesia, Federated States of"] <-  "Micronesia"
+intpop2$region[intpop2$region == "Eswatini"] <- "Swaziland"
+
+world$region[world$region == "Trinidad"] <- "Trinidad and Tobago"
+world$region[world$region == "Tobago"] <- "Trinidad and Tobago"
+world$region[world$region == "Saint Vincent"] <- "Saint Vincent and the Grenadines"
+world$region[world$region == "Grenadines"] <- "Saint Vincent and the Grenadines"
+world$region[world$region == "Antigua"] <- "Antigua and Barbuda"
+world$region[world$region == "Barbuda"] <- "Antigua and Barbuda"
+world$region[world$region == "Saint Kitts"] <- "Saint Kitts and Nevis"
+world$region[world$region == "Nevis"] <- "Saint Kitts and Nevis"
+
+intpop2 <- semi_join(intpop2, world, by = "region")
+gg <- ggplot()
+
+gg <- gg + geom_map(
+  data = world,
+  map = world,
+  aes(x = long, y = lat, map_id = region),
+  fill = "#ffffff",
+  color = "#ffffff",
+  size = 0.20
+  )
+
+gg <- gg + geom_map(
+  data = intpop2,
+  map = world,
+  aes(fill = Percentage, map_id = region),
+  color = "#ffffff",
+  size = 0.15
+  )
+  
+  gg <- gg + scale_fill_continuous(low = 'thistle2', high = 'darkblue',
+  guide = 'colorbar')
+  gg
+```
+As seen from the map above, few countries have the same percentage of internet users. To further answer this question, we created the bar chart below showing the average internet user percentage within each region of the world.
+```{r}
+regions$Country[regions$Country == "Russian Federation"] <- 'Russia'
+regions$Country[regions$Country == "Korea, Democratic People's Republic of"] <- "North Korea"
+regions$Country[regions$Country == "Korea, Republic of"] <- "South Korea"
+regions$Country[regions$Country == "Iran, Islamic Republic of"] <- "Iran"
+regions$Country[regions$Country == "Tanzania, United Republic of"] <- "Tanzania"
+regions$Country[regions$Country == "C?te D'Ivoire"] <- "Ivory Coast"
+regions$Country[regions$Country == "Syrian Arab Republic"] <- "Syria"
+regions$Country[regions$Country == "Congo, The Democratic Republic of the"] <- "Democratic Republic of the Congo"
+regions$Country[regions$Country == "Congo"] <- "Republic of Congo"
+regions$Country[regions$Country == "Moldova, Republic of"] <- "Moldova"
+regions$Country[regions$Country == "Lao People's Democratic Republic"] <- "Laos"
+regions$Country[regions$Country == "Brunei Darussalam"] <- "Brunei"
+regions$Country[regions$Country == "Cura?ao"] <- "Curacao"
+regions$Country[regions$Country == "Micronesia, Federated States of"] <- "Micronesia"
+regions$Country[regions$Country == "Virgin Islands, British"] <-  "British Virgin Islands"
+regions$Country[regions$Country == "Virgin Islands, U.S."] <-  "U.S. Virgin Islands"
+regions$Country[regions$Country == "Palestinian Territory"] <- "Palestine"
+regions$Region[regions$Region == "Asic & Pacific"] <- "Asia & Pacific"
+
+intpop3 <- intpop
+intpop3$Country[intpop3$Country == "Korea, South"] <- "South Korea"
+intpop3$Country[intpop3$Country == "Burma"] <-  "Myanmar"
+intpop3$Country[intpop3$Country == "Czechia"] <- "Czech Republic"
+intpop3$Country[intpop3$Country == "Congo, Democratic Republic of the"] <-  "Democratic Republic of the Congo"
+intpop3$Country[intpop3$Country == "Congo, Republic of the"] <-  "Republic of Congo"
+intpop3$Country[intpop3$Country == "Bahamas, The"] <-  "Bahamas"
+intpop3$Country[intpop3$Country == "Virgin Islands"] <-  "U.S. Virgin Islands"
+intpop3$Country[intpop3$Country == "Cote d'Ivoire"] <-  "Ivory Coast"
+intpop3$Country[intpop3$Country == "Eswatini"] <-  "Swaziland"
+intpop3$Country[intpop3$Country == "Cabo Verde"] <-  "Cape Verde"
+intpop3$Country[intpop3$Country == "Gambia, The"] <-  "Gambia"
+intpop3$Country[intpop3$Country == "Micronesia, Federated States of"] <-  "Micronesia"
+intpop3$Country[intpop3$Country == "Falkland Islands (Islas Malvinas)"] <-  "Falkland Islands (Malvinas)"
+intpop3$Country[intpop3$Country == "Saint Helena, Ascension, and Tristan da Cunha"] <-  "Saint Helena"
+
+intreg <- inner_join(intpop3, regions, by = "Country") %>%
+  filter(Region != 'Unknown') %>%
+  group_by(Region) %>%
+  summarise(Percentage=mean(as.numeric(Percentage)))
+intreg$Region <- fct_reorder(intreg$Region,intreg$Percentage)
+ggplot(data=intreg, aes(x=Region, y=Percentage)) + geom_bar(stat="identity")
+```
+The Bar Graph demonstartes that the regions have a different percentage of internet users ranging from about 86% in North America down to approximately 20% in Africa. With the regions having differnet internet usage percentages, we decided to analyze variables that may have an impact on the internet usage within a country/region, to figure out where these differences stem from.
+
+To answer the third question, we began by analyzing if the democracy score has an impact on the internet use percentage of a country. We defined demrocacy as: a style of government, where the power is with the entire population or where all the eligible members of a state typically elect representatives for the country. To see whether democracy does have an impact on the internet use we created a linear model and used linear regression analysis where the Democracy Score as the x-axis and the Internet Use Percentage as the y-axis.
+```{r}
+intpop4 <- intpop3
+democracyindex$Country[democracyindex$Country == "Republic of China (Taiwan)"] <- "Taiwan"
+intpop4$Country[intpop4$Country == "Republic of Congo"] <- "Republic of the Congo"
+intdec <- inner_join(democracyindex, intpop4, by = "Country")
+intdec <- inner_join(intdec, regions, by = "Country") %>%
+  select(Country, Score, Percentage, Region) %>%
+  arrange(desc(Score))
+intdec
+
+c <- paste0("Correlation Coefficient: ", cor(intdec$Score, intdec$Percentage))
+
+intdec <- lm(Percentage~Score, data = intdec)
+ggplot(data=intdec) + geom_point(mapping=aes(x=Score, y=Percentage))+geom_line(mapping=aes(x=Score, y = intdec$fitted.values))
+ggplot(intdec, aes(x=Score, y=intdec$residuals)) + geom_point() + geom_line(y=0)
+summary(intdec)
+l <- sprintf("Regression Line: y = %gx + %g", 8.0029,4.6709)
+r <- paste0("Multiple R-Squared: ", 0.3758)
+
+writeLines(c)
+writeLines(r)
+writeLines(l)
+```
+After creating the model and performing the regression analysis seen above, it is clear that there is a relationship between a country's internet users and its democracy score. There is a moderate positive correlation of 0.613 between the two variables. Also, the fitted regression line of y = 8.0029x + 4.6709 and the Coefficient of Determination of 37.58% shows that there is a moderate relationship between the two variables overall.
+
+We defined education as: the public expenditure on the process of receiving or giving instruction as a percent of GDP. To see whether education does have an impact on the internet use we created a linear model and used linear regression analysis where the Education percentage of GDP is the x-axis and the Internet Use Percentage is the y-axis.
+```{r}
+education$Country[education$Country == "Czechia"] <- "Czech Republic"
+education$Country[education$Country == "Korea, South"] <- "South Korea"
+education$Country[education$Country == "Cabo Verde"] <- "Cape Verde"
+education$Country[education$Country == "Cote d'Ivoire"] <- "Ivory Coast"
+education$Country[education$Country == "Congo, Republic of the"] <- "Republic of Congo"
+education$Country[education$Country == "Gambia, The"] <- "Gambia"
+education$Country[education$Country == "Congo, Democratic Republic of the"] <- "Democratic Republic of the Congo"
+education$Country[education$Country == "Burma"] <- "Myanmar"
+
+intedu <- inner_join(education, intpop3, by = "Country") %>%
+  select(Country,`(% OF GDP)`,Percentage)
+colnames(intedu)[colnames(intedu)=="(% OF GDP)"] <- "Education" 
+arrange(intedu, desc(Education))
+c <- paste0("Correlation Coefficient: ", cor(intedu$Education, intedu$Percentage))
+
+intedu <- lm(Percentage~Education, data = intedu)
+ggplot(data=intedu) + geom_point(mapping=aes(x=Education, y=Percentage))+geom_line(mapping=aes(x=Education, y = intedu$fitted.values))
+ggplot(intedu, aes(x=Education, y=intedu$residuals)) + geom_point() + geom_line(y=0)
+summary(intedu)
+l <- sprintf("Regression Line: y = %gx + %g", 0.4084,48.8111)
+r <- paste0("Multiple R-Squared: ", 0.000977)
+
+writeLines(c)
+writeLines(r)
+writeLines(l)
+```
+Looking at the above regression analysis it is clear that the education of a country has no affect on internet usage. There is no correlation between a country's internet usage and its education as the correlation is 0.03. The fitted regression line of y = 0.4084x + 48.111 and the plot of residuals is nearly identical showing no relationship between the two variables.
+
+We defined GDP per capita (PPP) as: the GDP on a purchasing power parity (PPP) basis divided by the population of the country. To see whether GDP per capita has an impact on the internet use we created a linear model and used linear regression analysis where the GDP per capita of a country is the x-axis and the Internet Use Percentage is the y-axis.
+
+```{r}
+GDP$Country[GDP$Country == "Czechia"] <- "Czech Republic"
+GDP$Country[GDP$Country == "Korea, South"] <- "South Korea"
+GDP$Country[GDP$Country == "Cabo Verde"] <- "Cape Verde"
+GDP$Country[GDP$Country == "Cote d'Ivoire"] <- "Ivory Coast"
+GDP$Country[GDP$Country == "Congo, Republic of the"] <- "Republic of Congo"
+GDP$Country[GDP$Country == "Gambia, The"] <- "Gambia"
+GDP$Country[GDP$Country == "Congo, Democratic Republic of the"] <- "Democratic Republic of the Congo"
+GDP$Country[GDP$Country == "Burma"] <- "Myanmar"
+GDP$Country[GDP$Country == "Bahamas, The"] <-  "Bahamas"
+GDP$Country[GDP$Country == "Cote d'Ivoire"] <-  "Ivory Coast"
+GDP$Country[GDP$Country == "Eswatini"] <-  "Swaziland"
+GDP$Country[GDP$Country == "Micronesia, Federated States of"] <-  "Micronesia"
+GDP$Country[GDP$Country == "Falkland Islands (Islas Malvinas)"] <-  "Falkland Islands (Malvinas)"
+GDP$Country[GDP$Country == "Saint Helena, Ascension, and Tristan da Cunha"] <-  "Saint Helena"
+
+intgdp <- inner_join(intpop3, GDP, by = "Country") %>%
+  select(Country, `GDP - PER CAPITA (PPP)`, Percentage)
+colnames(intgdp)[colnames(intgdp)=="GDP - PER CAPITA (PPP)"] <- "GDP" 
+arrange(intgdp, desc(GDP))
+c <- paste0("Correlation Coefficient: ", cor(intgdp$GDP, intgdp$Percentage))
+
+
+intgdp <- lm(Percentage~GDP, data = intgdp)
+ggplot(data=intgdp) + geom_point(mapping=aes(x=GDP, y=Percentage))+geom_line(mapping=aes(x=GDP, y = intgdp$fitted.values))
+ggplot(intgdp, aes(x=GDP, y=intgdp$residuals)) + geom_point() + geom_line(y=0)
+summary(intgdp)
+l <- sprintf("Regression Line: y = %gx + %g", 0.00083,31.99)
+r <- paste0("Multiple R-Squared: ", 0.5302)
+
+writeLines(r)
+writeLines(l)
+writeLines(c)
+```
+It appears that the GDP does have an affect on a country's internet usage from the linear regression analysis performed. The GDP and internet user percentage has a strong positive correlation of about 0.728. Through the fitted regression line of y=0.00083x + 31.99 and the the coefficient of determination of 53.02% it is clear that there is a moderate relationship between a country's internet usage and its GDP.
+
+We defined Health as: total expenditure on activities performed through the application of medical, paramedical, and/or nursing knowledge and technology to promote, maintain or restore health. To see whether health does have an impact on the internet use we created a linear model and used linear regression analysis where the health of a country is the x-axis and the Internet Use Percentage is the y-axis.
+```{r}
+healthexpend$Country[healthexpend$Country == "Czechia"] <- "Czech Republic"
+healthexpend$Country[healthexpend$Country == "Korea, South"] <- "South Korea"
+healthexpend$Country[healthexpend$Country == "Cabo Verde"] <- "Cape Verde"
+healthexpend$Country[healthexpend$Country == "Cote d'Ivoire"] <- "Ivory Coast"
+healthexpend$Country[healthexpend$Country == "Congo, Republic of the"] <- "Republic of Congo"
+healthexpend$Country[healthexpend$Country == "Gambia, The"] <- "Gambia"
+healthexpend$Country[healthexpend$Country == "Congo, Democratic Republic of the"] <- "Democratic Republic of the Congo"
+healthexpend$Country[healthexpend$Country == "Burma"] <- "Myanmar"
+healthexpend$Country[healthexpend$Country == "Bahamas, The"] <-  "Bahamas"
+healthexpend$Country[healthexpend$Country == "Cote d'Ivoire"] <-  "Ivory Coast"
+healthexpend$Country[healthexpend$Country == "Micronesia, Federated States of"] <-  "Micronesia"
+
+inthealth <- inner_join(healthexpend, intpop3, by = "Country") %>%
+  select(Country, `(% OF GDP)`, Percentage)
+colnames(inthealth)[colnames(inthealth)=="(% OF GDP)"] <- "Health" 
+arrange(inthealth, desc(Health))
+c <- paste0("Correlation Coefficient: ", cor(inthealth$Health, inthealth$Percentage))
+
+inthealth <- lm(Percentage~Health, data = inthealth)
+ggplot(data=inthealth) + geom_point(mapping=aes(x=Health, y=Percentage))+geom_line(mapping=aes(x=Health, y = inthealth$fitted.values))
+ggplot(inthealth, aes(x=Health, y=inthealth$residuals)) + geom_point() + geom_line(y=0)
+summary(inthealth)
+l <- sprintf("Regression Line: y = %gx + %g", 2.83,29.21)
+r <- paste0("Multiple R-Squared: ", 0.08308)
+writeLines(r)
+writeLines(c)
+writeLines(l)
+```
+Seen from the above plots of the residuals and the Health vs Percentage it is evident that there is no relationship between the percentage of internet users in a country and health of that country. There is a positive weak correlation between the Health and Percentage of internet users in a country. As well, given the fitted line of y = 2.83x + 29.21, only 8.31% of the variance in the data can be explained by this line. Through the residual plot the majority of the points are very scattered and have very large values which also proves that the Health of a country has no affect on the percentage of internet users in that country.
+
+To answer Question four we began by creating a new variable called Phoneline.Per.Person which counted the number of phone lines in each country compared to the population. The variable was created by dividing the number of phonelines in a country by its population. We felt that creating this variable would give more accurate results than comparing it to internet percentage as it removed a country's population and size difference which may cause a country to have more or less phonelines.
+```{r}
+phonelines$Country[phonelines$Country == "Czechia"] <- "Czech Republic"
+phonelines$Country[phonelines$Country == "Korea, South"] <- "South Korea"
+phonelines$Country[phonelines$Country == "Cabo Verde"] <- "Cape Verde"
+phonelines$Country[phonelines$Country == "Cote d'Ivoire"] <- "Ivory Coast"
+phonelines$Country[phonelines$Country == "Congo, Republic of the"] <- "Republic of Congo"
+phonelines$Country[phonelines$Country == "Gambia, The"] <- "Gambia"
+phonelines$Country[phonelines$Country == "Burma"] <- "Myanmar"
+phonelines$Country[phonelines$Country == "Bahamas, The"] <-  "Bahamas"
+phonelines$Country[phonelines$Country == "Cote d'Ivoire"] <-  "Ivory Coast"
+phonelines$Country[phonelines$Country == "Micronesia, Federated States of"] <-  "Micronesia"
+phonelines$Country[phonelines$Country == "Eswatini"] <- "Swaziland"
+phonelines$Country[phonelines$Country == "Falkland Islands (Islas Malvinas)"] <-  "Falkland Islands (Malvinas)"
+phonelines$Country[phonelines$Country == "Saint Helena, Ascension, and Tristan da Cunha"] <-  "Saint Helena"
+palestinephones <- phonelines$`TELEPHONES - MAIN LINES IN USE`[101] +phonelines$`TELEPHONES - MAIN LINES IN USE`[98]
+phonelines$Country[98] <- "Palestine"
+phonelines$`TELEPHONES - MAIN LINES IN USE`[98] <- palestinephones
+
+intphone <- inner_join(phonelines, intpop3, by = "Country") %>%
+  select(Country, `TELEPHONES - MAIN LINES IN USE`, Percentage, Population)
+colnames(intphone)[colnames(intphone)=="TELEPHONES - MAIN LINES IN USE"] <- "Phonelines" 
+intphone <- mutate(intphone, Phoneline.Per.Person = Phonelines/Population)
+arrange(intphone, desc(Phoneline.Per.Person))
+c <- paste0("Correlation Coefficient: ", cor(intphone$Phoneline.Per.Person, intphone$Percentage))
+
+intphone <- lm(Percentage~Phoneline.Per.Person, data = intphone)
+ggplot(data=intphone) + geom_point(mapping=aes(x=Phoneline.Per.Person, y=Percentage))+geom_line(mapping=aes(x=Phoneline.Per.Person, y = intphone$fitted.values))
+ggplot(intphone, aes(x=Phoneline.Per.Person, y=intphone$residuals)) + geom_point() + geom_line(y=0)
+summary(intphone)
+l <- sprintf("Regression Line: y = %gx + %g", 88.990,33.362)
+r <- paste0("Multiple R-Squared: ", 0.4638)
+writeLines(r)
+writeLines(c)
+writeLines(l)
+```
+It appears that the number of phonelines per person does have an affect on a country's internet usage from the linear regression analysis performed. The GDP and internet user percentage has a moderate positive correlation of about 0.662. Through the fitted regression line of y=88.99x + 33.362 and the coefficient of determination of 46.38% it is clear that there is a moderate relationship between a countries' internet usage and its phonelines per person.
+
+In conclusion, with the analysis of internet usage and other variables it is clear that the more developed the country, the higher the internet usage. This is evident through the GDP, Democracy and phone lines analysis. All three of those variables had at least a moderate relationship with internet usage in a country. Within these variables the first world countries were always highly ranked in these variables with also a high percentage of internet users. These first world countries were followed by second world countries and then third world countries. This also explains why there is difference in the internet usage per regions as North America contains all first world countries and has the highest internet usage percentage followed by Europe, which is majority first world countries as well. This is also in line with Africa having the lowest internet percentage as all the countries in Africa are third world countries.
